@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Previsão do Tempo & Modelagem Meteorológica</title>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .card {
+      background-color: var(--card-bg);
+      border-radius: 16px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+      width: 100%;
+      max-width: 580px;
+      padding: 32px;
+      text-align: center;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      margin-bottom: 8px;
+      color: var(--primary);
+    }
+
+    p.subtitle {
+      color: var(--text-muted);
+      font-size: 0.875rem;
+      margin-bottom: 20px;
+    }
+
+    .status-badge {
+      display: inline-block;
+      background-color: #e0f2fe;
+      color: #0369a1;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      margin-bottom: 20px;
+    }
+
+    .temp-display {
+      font-size: 3.5rem;
+      font-weight: 700;
+      margin: 12px 0;
+    }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      margin-top: 20px;
+      border-top: 1px solid var(--border);
+      padding-top: 20px;
+    }
+
+    .metric-item {
+      background-color: #f1f5f9;
+      padding: 14px;
+      border-radius: 12px;
+    }
+
+    .metric-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 4px;
+    }
+
+    .metric-value {
+      font-size: 1.125rem;
+      font-weight: 600;
+    }
+
+    /* Seção da Tabela de Previsão */
+    .forecast-section {
+      margin-top: 28px;
+      border-top: 1px solid var(--border);
+      padding-top: 20px;
+      text-align: left;
+    }
+
+    .forecast-title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 12px;
+    }
+
+    .table-container {
+      max-height: 240px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+
+    th {
+      background-color: #f1f5f9;
+      color: var(--text-muted);
+      font-weight: 600;
+      padding: 10px 12px;
+      text-align: center;
+      position: sticky;
+      top: 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    td {
+      padding: 10px 12px;
+      text-align: center;
+      border-bottom: 1px solid #f1f5f9;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:nth-child(even) {
+      background-color: #fafafa;
+    }
+
+    button {
+      background-color: var(--primary);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+      margin-top: 24px;
+      transition: background-color 0.2s;
+    }
+
+    button:hover {
+      background-color: #1d4ed8;
+    }
+
+    .loading {
+      display: none;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      margin: 20px 0;
+    }
+
+    .error-msg {
+      color: #ef4444;
+      font-size: 0.875rem;
+      margin-top: 16px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <h1>Clima & Meteorologia</h1>
+    <p class="subtitle">Modelo baseado em Resolução de Sistemas Lineares</p>
+    
+    <div id="status" class="status-badge">Detectando sua localização...</div>
+
+    <div id="loading" class="loading">Detectando o clima...</div>
+
+    <div id="weather-content" style="display: none;">
+      <div id="location-name" style="font-weight: 600; font-size: 1.1rem;">-</div>
+      <div class="temp-display" id="temperature">--°C</div>
+      
+      <div class="metrics-grid">
+        <div class="metric-item">
+          <div class="metric-label">Chuva / Precipitação</div>
+          <div class="metric-value" id="precipitation">-- mm</div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-label">Vento (10m)</div>
+          <div class="metric-value" id="wind">-- km/h</div>
+        </div>
+      </div>
+
+      <!-- Tabela de Previsão das Próximas Horas -->
+      <div class="forecast-section">
+        <div class="forecast-title">Previsão Horária (Próximas Horas)</div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Horário</th>
+                <th>Temp.</th>
+                <th>Chuva</th>
+                <th>Vento</th>
+              </tr>
+            </thead>
+            <tbody id="forecast-table-body">
+              <!-- As linhas da tabela serão inseridas dinamicamente via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="error" class="error-msg"></div>
+
+    <button onclick="getWeatherData()">Atualizar Clima</button>
+  </div>
+
+  <script>
+    // Substitua o endpoint local pelo endpoint hospedado na Vercel
+    const API_URL = 'https://api-weather-three.vercel.app/weather/forecast';
+
+    async function getWeatherData() {
+      const loadingEl = document.getElementById('loading');
+      const contentEl = document.getElementById('weather-content');
+      const statusEl = document.getElementById('status');
+      const errorEl = document.getElementById('error');
+
+      loadingEl.style.display = 'block';
+      contentEl.style.display = 'none';
+      errorEl.style.display = 'none';
+
+      const geoOptions = {
+        enableHighAccuracy: false,
+        timeout: 5000,
+        maximumAge: 0
+      };
+
+      if ("geolocation" in navigator) {
+        navigator.geolocation.getCurrentPosition(
+          async (position) => {
+            const lat = position.coords.latitude;
+            const lon = position.coords.longitude;
+            statusEl.innerText = `GPS: (${lat.toFixed(2)}, ${lon.toFixed(2)})`;
+            await fetchFromBackend(`${API_URL}?latitude=${lat}&longitude=${lon}`);
+          },
+          async (error) => {
+            console.warn('Permissão de GPS negada/indisponível. Usando IP no backend.');
+            statusEl.innerText = 'Localização por IP (Aproximada)';
+            await fetchFromBackend(API_URL);
+          },
+          geoOptions
+        );
+      } else {
+        statusEl.innerText = 'Localização por IP (Aproximada)';
+        await fetchFromBackend(API_URL);
+      }
+    }
+
+    async function fetchFromBackend(url) {
+      const loadingEl = document.getElementById('loading');
+      const contentEl = document.getElementById('weather-content');
+      const errorEl = document.getElementById('error');
+      const tableBody = document.getElementById('forecast-table-body');
+
+      try {
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+          throw new Error(`Erro na requisição: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+
+        // 1. Preenche os dados atuais
+        document.getElementById('location-name').innerText = 
+          data.detectedLocation || 
+          (data.location ? `Lat: ${data.location.latitude}, Lon: ${data.location.longitude}` : 'Localização Detectada');
+
+        document.getElementById('temperature').innerText = 
+          data.current?.temperature_2m !== undefined ? `${data.current.temperature_2m}°C` : '--°C';
+
+        document.getElementById('precipitation').innerText = 
+          data.current?.precipitation !== undefined ? `${data.current.precipitation} mm` : '0 mm';
+
+        document.getElementById('wind').innerText = 
+          data.current?.wind_speed_10m !== undefined ? `${data.current.wind_speed_10m} km/h` : '0 km/h';
+
+        // 2. Constrói as linhas da Tabela com a Previsão Horária
+        tableBody.innerHTML = ''; // Limpa tabela anterior
+
+        if (data.hourlyForecast && data.hourlyForecast.time) {
+          const times = data.hourlyForecast.time;
+          const temps = data.hourlyForecast.temperature_2m || data.hourlyForecast.temp_c || [];
+          const precips = data.hourlyForecast.precipitation || data.hourlyForecast.precip_mm || [];
+          const winds = data.hourlyForecast.wind_speed_10m || data.hourlyForecast.wind_kph || [];
+
+          // Pega as próximas 12 horas para exibir na tabela
+          const limit = Math.min(times.length, 24);
+
+          for (let i = 0; i < limit; i++) {
+            // Formata a data/hora para exibir apenas "HH:MM" ou "DD/MM HH:MM"
+            const dateObj = new Date(times[i]);
+            const formattedTime = `${String(dateObj.getHours()).padStart(2, '0')}:00`;
+
+            const row = document.createElement('tr');
+            row.innerHTML = `
+              <td><strong>${formattedTime}</strong></td>
+              <td>${temps[i] !== undefined ? temps[i] : '--'}°C</td>
+              <td>${precips[i] !== undefined ? precips[i] : '0'} mm</td>
+              <td>${winds[i] !== undefined ? winds[i] : '0'} km/h</td>
+            `;
+            tableBody.appendChild(row);
+          }
+        }
+
+        loadingEl.style.display = 'none';
+        contentEl.style.display = 'block';
+      } catch (err) {
+        console.error(err);
+        loadingEl.style.display = 'none';
+        errorEl.innerText = `Falha ao carregar dados: ${err.message}. Verifique se a API NestJS está rodando com CORS ativado!`;
+        errorEl.style.display = 'block';
+      }
+    }
+
+    window.onload = getWeatherData;
+  </script>
+</body>
+</html>
