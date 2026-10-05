@@ -36,7 +36,7 @@
       border-radius: 16px;
       box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
       width: 100%;
-      max-width: 580px;
+      max-width: 980px;
       padding: 32px;
       text-align: center;
     }
@@ -96,6 +96,74 @@
     .metric-value {
       font-size: 1.125rem;
       font-weight: 600;
+    }
+
+    .weekly-forecast {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 14px;
+    }
+
+    .day-card {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 16px;
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+
+    .day-heading {
+      text-align: left;
+      font-weight: 700;
+      text-transform: capitalize;
+    }
+
+    .day-date {
+      display: block;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      font-weight: 400;
+      margin-top: 2px;
+    }
+
+    .weather-icon {
+      width: 42px;
+      height: 42px;
+      color: var(--primary);
+      grid-column: 2;
+      grid-row: 1 / span 2;
+    }
+
+    .day-condition {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      text-align: left;
+    }
+
+    .day-temperatures {
+      grid-column: 1 / -1;
+      display: flex;
+      justify-content: space-between;
+      border-top: 1px solid var(--border);
+      padding-top: 10px;
+      font-size: 1.05rem;
+    }
+
+    .day-temperatures span:last-child {
+      color: var(--text-muted);
+    }
+
+    .day-details {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 12px;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      text-align: left;
     }
 
     /* Seção da Tabela de Previsão */
@@ -168,6 +236,11 @@
       background-color: #1d4ed8;
     }
 
+    button:disabled {
+      cursor: wait;
+      opacity: 0.7;
+    }
+
     .loading {
       display: none;
       color: var(--text-muted);
@@ -180,6 +253,16 @@
       font-size: 0.875rem;
       margin-top: 16px;
       display: none;
+    }
+
+    @media (max-width: 600px) {
+      .card {
+        padding: 22px 16px;
+      }
+
+      .weekly-forecast {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
@@ -208,6 +291,11 @@
         </div>
       </div>
 
+      <div class="forecast-section">
+        <div class="forecast-title">Previsão para os próximos 7 dias</div>
+        <div id="weekly-forecast" class="weekly-forecast" aria-live="polite"></div>
+      </div>
+
       <!-- Tabela de Previsão das Próximas Horas -->
       <div class="forecast-section">
         <div class="forecast-title">Previsão Horária (Próximas Horas)</div>
@@ -231,7 +319,7 @@
 
     <div id="error" class="error-msg"></div>
 
-    <button onclick="getWeatherData()">Atualizar Clima</button>
+    <button id="refresh-button" onclick="getWeatherData()">Atualizar Clima</button>
   </div>
 
   <script>
@@ -243,10 +331,12 @@
       const contentEl = document.getElementById('weather-content');
       const statusEl = document.getElementById('status');
       const errorEl = document.getElementById('error');
+      const refreshButton = document.getElementById('refresh-button');
 
       loadingEl.style.display = 'block';
       contentEl.style.display = 'none';
       errorEl.style.display = 'none';
+      refreshButton.disabled = true;
 
       const geoOptions = {
         enableHighAccuracy: false,
@@ -280,6 +370,8 @@
       const contentEl = document.getElementById('weather-content');
       const errorEl = document.getElementById('error');
       const tableBody = document.getElementById('forecast-table-body');
+      const weeklyForecast = document.getElementById('weekly-forecast');
+      const refreshButton = document.getElementById('refresh-button');
 
       try {
         const response = await fetch(url);
@@ -289,6 +381,10 @@
         }
 
         const data = await response.json();
+
+        if (!data.dailyForecast?.time?.length) {
+          throw new Error('A API não retornou a previsão diária de 7 dias. Atualize o backend para a versão mais recente.');
+        }
 
         // 1. Preenche os dados atuais
         document.getElementById('location-name').innerText = 
@@ -303,6 +399,8 @@
 
         document.getElementById('wind').innerText = 
           data.current?.wind_speed_10m !== undefined ? `${data.current.wind_speed_10m} km/h` : '0 km/h';
+
+        renderWeeklyForecast(data.dailyForecast, weeklyForecast);
 
         // 2. Constrói as linhas da Tabela com a Previsão Horária
         tableBody.innerHTML = ''; // Limpa tabela anterior
@@ -336,10 +434,121 @@
         contentEl.style.display = 'block';
       } catch (err) {
         console.error(err);
-        loadingEl.style.display = 'none';
-        errorEl.innerText = `Falha ao carregar dados: ${err.message}. Verifique se a API NestJS está rodando com CORS ativado!`;
+        errorEl.innerText = `Falha ao carregar dados: ${err.message}`;
         errorEl.style.display = 'block';
+      } finally {
+        loadingEl.style.display = 'none';
+        refreshButton.disabled = false;
       }
+    }
+
+    function renderWeeklyForecast(forecast, container) {
+      const fields = [
+        'weather_code',
+        'temperature_2m_max',
+        'temperature_2m_min',
+        'precipitation_sum',
+        'precipitation_probability_max',
+        'wind_speed_10m_max',
+        'sunrise',
+        'sunset'
+      ];
+
+      if (fields.some((field) => !Array.isArray(forecast[field]))) {
+        throw new Error('A previsão semanal está incompleta.');
+      }
+
+      const formatter = new Intl.DateTimeFormat('pt-BR', {
+        weekday: 'long',
+        day: '2-digit',
+        month: 'short'
+      });
+      container.replaceChildren();
+
+      forecast.time.forEach((date, index) => {
+        const code = forecast.weather_code[index];
+        const card = document.createElement('article');
+        card.className = 'day-card';
+
+        const heading = document.createElement('div');
+        heading.className = 'day-heading';
+        heading.textContent = index === 0 ? 'Hoje' : formatter.format(new Date(`${date}T12:00:00`));
+
+        const dateLabel = document.createElement('span');
+        dateLabel.className = 'day-date';
+        dateLabel.textContent = date.split('-').reverse().join('/');
+        heading.appendChild(dateLabel);
+
+        const icon = document.createElement('span');
+        icon.className = 'weather-icon';
+        icon.setAttribute('aria-label', describeWeather(code));
+        icon.innerHTML = weatherIcon(code);
+
+        const condition = document.createElement('div');
+        condition.className = 'day-condition';
+        condition.textContent = describeWeather(code);
+
+        const temperatures = document.createElement('div');
+        temperatures.className = 'day-temperatures';
+        const maximum = document.createElement('strong');
+        maximum.textContent = `Máx. ${formatForecastValue(forecast.temperature_2m_max[index])}°`;
+        const minimum = document.createElement('span');
+        minimum.textContent = `Mín. ${formatForecastValue(forecast.temperature_2m_min[index])}°`;
+        temperatures.append(maximum, minimum);
+
+        const details = document.createElement('div');
+        details.className = 'day-details';
+        addForecastDetail(details, 'Chuva', `${formatForecastValue(forecast.precipitation_sum[index])} mm`);
+        addForecastDetail(details, 'Chance de chuva', `${formatForecastValue(forecast.precipitation_probability_max[index])}%`);
+        addForecastDetail(details, 'Vento máximo', `${formatForecastValue(forecast.wind_speed_10m_max[index])} km/h`);
+        addForecastDetail(details, 'Sol', `${formatTime(forecast.sunrise[index])} – ${formatTime(forecast.sunset[index])}`);
+
+        card.append(heading, icon, condition, temperatures, details);
+        container.appendChild(card);
+      });
+    }
+
+    function addForecastDetail(container, label, value) {
+      const detail = document.createElement('div');
+      detail.textContent = `${label}: ${value}`;
+      container.appendChild(detail);
+    }
+
+    function formatForecastValue(value) {
+      return Number.isFinite(value) ? new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 }).format(value) : '--';
+    }
+
+    function formatTime(value) {
+      return typeof value === 'string' ? value.slice(-5) : '--:--';
+    }
+
+    function describeWeather(code) {
+      if (code === 0) return 'Céu limpo';
+      if (code === 1) return 'Predominantemente limpo';
+      if (code === 2) return 'Parcialmente nublado';
+      if (code === 3) return 'Nublado';
+      if (code === 45 || code === 48) return 'Neblina';
+      if ([51, 53, 55, 56, 57].includes(code)) return 'Garoa';
+      if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return 'Chuva';
+      if ([71, 73, 75, 77, 85, 86].includes(code)) return 'Neve';
+      if ([95, 96, 99].includes(code)) return 'Trovoada';
+      return 'Condição indisponível';
+    }
+
+    function weatherIcon(code) {
+      const symbol = [95, 96, 99].includes(code)
+        ? '<path d="M13 2 6 13h5l-1 9 8-12h-5l1-8Z"/>'
+        : [71, 73, 75, 77, 85, 86].includes(code)
+          ? '<path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9M12 3l2 2m-2-2-2 2m2 16 2-2m-2 2-2-2M4.2 7.5l2.8.2-.8 2.7m13.6 5.1-2.8-.2.8-2.7m-13.6 3.9 2.8-.2-.8-2.7m13.6-5.1-2.8.2.8 2.7"/>'
+          : [51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82].includes(code)
+            ? '<path d="M7 16.5a4.5 4.5 0 0 1 .8-8.9A5.5 5.5 0 0 1 18.5 9a3.8 3.8 0 0 1-.3 7.5M8 19l-1 2m6-2-1 2m6-2-1 2"/>'
+            : code === 45 || code === 48
+              ? '<path d="M3 8h18M5 12h14M3 16h18"/>'
+                : [1, 2, 3].includes(code)
+                  ? '<path d="M7 17h10a4 4 0 0 0 .5-8A5.5 5.5 0 0 0 7 10a3.5 3.5 0 0 0 0 7Z"/><path d="M7 3v2m-4 1.5 1.5 1.5M1 11h2"/>'
+                : '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/>';
+
+      return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${symbol}</svg>`;
     }
 
     window.onload = getWeatherData;
